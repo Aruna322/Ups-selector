@@ -1,0 +1,57 @@
+﻿Country,Results Page Opened,Status,Reason,Continue Clicked,Products Count,Screenshot
+Algeria,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Algeria_pass_product_page_20260424_171522.png
+Argentina,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Argentina_pass_product_page_20260424_171559.png
+Australia,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Australia_pass_product_page_20260424_171637.png
+Austria,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Austria_pass_product_page_20260424_171715.png
+Belgium,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Belgium_pass_product_page_20260424_171753.png
+Brazil,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Brazil_pass_product_page_20260424_171829.png
+Canada,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Canada_pass_product_page_20260424_171907.png
+Chile,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Chile_pass_product_page_20260424_171945.png
+China,NO,FAIL,Continue button not clicked,NO,0,dell_ups_test_output\screenshots\China_continue_not_clicked_20260424_172001.png
+Columbia,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Columbia_pass_product_page_20260424_172039.png
+Costa Rica,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Costa_Rica_pass_product_page_20260424_172116.png
+Croatia,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Croatia_pass_product_page_20260424_172153.png
+Czech Republic,YES,PASS,Product page opened. No no-result text found. Count=1,YES,1,dell_ups_test_output\screenshots\Czech_Republic_pass_product_page_20260424_172230.png
+Denmark,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Denmark_pass_product_page_20260424_172307.png
+Egypt,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Egypt_pass_product_page_20260424_172344.png
+Finland,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Finland_pass_product_page_20260424_172419.png
+France,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\France_pass_product_page_20260424_172457.png
+Francophone Africia,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Francophone_Africia_pass_product_page_20260424_172534.png
+Germany,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Germany_pass_product_page_20260424_172611.png
+Greece,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Greece_pass_product_page_20260424_172646.png
+Hong Kong,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Hong_Kong_pass_product_page_20260424_172723.png
+Hungary,YES,PASS,Product page opened. No no-result text found. Count=1,YES,1,dell_ups_test_output\screenshots\Hungary_pass_product_page_20260424_172801.png
+India,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\India_pass_product_page_20260424_172839.png
+Indonesia,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Indonesia_pass_product_page_20260424_172918.png
+Ireland,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Ireland_pass_product_page_20260424_172955.png
+Israel,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Israel_pass_product_page_20260424_173032.png
+Italy,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Italy_pass_product_page_20260424_173109.png
+Japan,NO,FAIL,Continue button not clicked,NO,0,dell_ups_test_output\screenshots\Japan_continue_not_clicked_20260424_173124.png
+Kazakhstan,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Kazakhstan_pass_product_page_20260424_173159.png
+Korea,YES,PASS,Product page opened. No no-result text found. Count=1,YES,1,dell_ups_test_output\screenshots\Korea_pass_product_page_20260424_173236.png
+Malaysia,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Malaysia_pass_product_page_20260424_173314.png
+Mexico,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Mexico_pass_product_page_20260424_173350.png
+Morocco,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Morocco_pass_product_page_20260424_173427.png
+Netherlands,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Netherlands_pass_product_page_20260424_173504.png
+New Zealand,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\New_Zealand_pass_product_page_20260424_173539.png
+Nigeria,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Nigeria_pass_product_page_20260424_173616.png
+Peru,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Peru_pass_product_page_20260424_173652.png
+Philippines,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Philippines_pass_product_page_20260424_173730.png
+Poland,YES,PASS,Product page opened. No no-result text found. Count=1,YES,1,dell_ups_test_output\screenshots\Poland_pass_product_page_20260424_173807.png
+Portugal,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Portugal_pass_product_page_20260424_173843.png
+Romania,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Romania_pass_product_page_20260424_173920.png
+Russian Federation,YES,FAIL,No products: \b0\s+results?\b,YES,0,dell_ups_test_output\screenshots\Russian_Federation_fail_zero_results_20260424_173955.png
+Saudi Arabia,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Saudi_Arabia_pass_product_page_20260424_174033.png
+Singapore,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Singapore_pass_product_page_20260424_174109.png
+South Africa,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\South_Africa_pass_product_page_20260424_174146.png
+Spain,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Spain_pass_product_page_20260424_174223.png
+Sweden,YES,PASS,Product page opened. No no-result text found. Count=1,YES,1,dell_ups_test_output\screenshots\Sweden_pass_product_page_20260424_174300.png
+Switzerland,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Switzerland_pass_product_page_20260424_174338.png
+Taiwan,NO,FAIL,Continue button not clicked,NO,0,dell_ups_test_output\screenshots\Taiwan_continue_not_clicked_20260424_174354.png
+Thailand,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Thailand_pass_product_page_20260424_174430.png
+Turkey,YES,PASS,Product page opened. No no-result text found. Count=1,YES,1,dell_ups_test_output\screenshots\Turkey_pass_product_page_20260424_174508.png
+Ukraine,YES,PASS,Product page opened. No no-result text found. Count=1,YES,1,dell_ups_test_output\screenshots\Ukraine_pass_product_page_20260424_174545.png
+United Arab Emirates,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\United_Arab_Emirates_pass_product_page_20260424_174623.png
+United Kingdom,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\United_Kingdom_pass_product_page_20260424_174702.png
+United States,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\United_States_pass_product_page_20260424_174739.png
+Vietnam,YES,PASS,Product page opened. No no-result text found. Count=50,YES,50,dell_ups_test_output\screenshots\Vietnam_pass_product_page_20260424_174817.png
