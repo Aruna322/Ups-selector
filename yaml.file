@@ -1,177 +1,41 @@
-name: CPT-ANGULAR-Search-Widget Pipeline
+name: Dell UPS Selector Test
 
 on:
-push:
-    **branches:**
-
-      **- main      # change if you use a different branch**
-
-workflow_dispatch:  # allows manual run from Actions tab
+  workflow_dispatch:
+  schedule:
+    # Runs daily at 9:00 AM UTC
+    # This is 2:30 PM IST
+    - cron: "0 9 * * *"
 
 jobs:
-build-and-scan:
-    **# If you have Black Duck / Fortify installed on your own runner,**
-
-    **# use: runs-on: self-hosted**
-
-    **runs-on: ubuntu-latest**
-
-
-
-    **steps:**
-
-      **# 1. Checkout code (similar to Jenkins git checkout)**
-
-      **- name: Checkout repository**
-
-        **uses: actions/checkout@v4**
-
-
-
-      **# 2. Setup Node.js (needed for npm)**
-
-      **- name: Setup Node.js**
-
-        **uses: actions/setup-node@v4**
-
-        **with:**
-
-          **node-version: '18'   # pick the Node version your project needs**
-
-
-
-      **# 3. Install dependencies  (Jenkins: npm install)**
-
-      **- name: Install dependencies**
-
-        **run: npm install**
-
-
-
-      **# 4. Build Svelte widget (Jenkins: npm run build)**
-
-      **- name: Build application**
-
-        **run: npm run build**
-
-
-
-      **# 5. Black Duck – Synopsys Detect scan**
-
-      **# In Jenkins you ran a java -jar command.**
-
-      **# Here we download Detect and run it with secrets.**
-
-      **- name: Run Synopsys Detect (Black Duck)**
-
-        **env:**
-
-          **BLACKDUCK\_URL: ${{ secrets.BLACKDUCK\_URL }}**
-
-          **BLACKDUCK\_API\_TOKEN: ${{ secrets.BLACKDUCK\_API\_TOKEN }}**
-
-        **run: |**
-
-          **# Download detect.sh from Synopsys**
-
-          **curl -s -L https://detect.synopsys.com/detect.sh -o detect.sh**
-
-          **chmod +x detect.sh**
-
-
-
-          **# Run Detect (similar to your Jenkins java -jar command)**
-
-          **./detect.sh \\**
-
-            **--blackduck.url="${BLACKDUCK\_URL}" \\**
-
-            **--blackduck.api.token="${BLACKDUCK\_API\_TOKEN}" \\**
-
-            **--detect.project.name="CPT-Search Widget UIaaS" \\**
-
-            **--detect.project.version.name="1.20.0" \\**
-
-            **--detect.source.path="."**
-
-
-
-      **# 6. Fortify SCA – build \& scan**
-
-      **# This assumes sourceanalyzer \& fortifyupdate are available on the runner**
-
-      **- name: Run Fortify SCA (build and scan)**
-
-        **run: |**
-
-          **# Clean previous Fortify build (Jenkins: sourceanalyzer -clean)**
-
-          **sourceanalyzer -b CPT-ANGULAR-Search-Widget -clean**
-
-
-
-          **# Translate source files (similar to Jenkins command)**
-
-          **sourceanalyzer -b CPT-ANGULAR-Search-Widget \\**
-
-            **babel.config.js \\**
-
-            **coverage \\**
-
-            **jest.config.js \\**
-
-            **node\_modules \\**
-
-            **package.json \\**
-
-            **package-lock.json \\**
-
-            **public \\**
-
-            **README.md \\**
-
-            **rollup.config.js \\**
-
-            **scripts \\**
-
-            **src**
-
-
-
-          **# Run Fortify scan and generate FPR file**
-
-          **sourceanalyzer -b CPT-ANGULAR-Search-Widget \\**
-
-            **-scan \\**
-
-            **-f cpt.angular-search-widget1.fpr \\**
-
-            **-verbose \\**
-
-            **-logfile fortify-scan.log**
-
-
-
-      **# 7. (Optional) Upload FPR to Fortify Software Security Center**
-
-      **# In Jenkins the plugin uploaded to SSC.**
-
-      **# Here you can use fortifyclient or your internal CLI (example below).**
-
-      **- name: Upload Fortify FPR to SSC (example)**
-
-        **if: always()**
-
-        **env:**
-
-          **FORTIFY\_URL: ${{ secrets.FORTIFY\_URL }}**
-
-          **FORTIFY\_TOKEN: ${{ secrets.FORTIFY\_TOKEN }}**
-
-        **run: |**
-
-          **echo "TODO: Replace this step with your actual Fortify upload command."**
-
-          **echo "Example (if fortifyclient is installed):"**
-
-          **echo "fortifyclient uploadFPR -url \\"$FORTIFY\_URL\\" -authtoken \\"$FORTIFY\_TOKEN\\" -file cpt.angular-search-widget1.fpr -project \\"CPT-Search Widget UIaaS\\" -version \\"release\\""**
+  dell-ups-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python packages
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium browser
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Run Dell UPS automation script
+        run: |
+          python dell_ups_final_commented.py
+
+      - name: Upload CSV report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dell-ups-test-output
+          path: dell_ups_test_output/
