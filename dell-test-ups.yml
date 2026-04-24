@@ -34,7 +34,7 @@ BASE_URL = "https://dellups.com/ups-selector/"
 
 # HEADLESS = False means browser will open visibly.
 # HEADLESS = True means browser will run in the background.
-HEADLESS = False
+HEADLESS = True
 
 # SLOW_MO slows down each Playwright action slightly.
 # This is useful when testing dynamic websites.
