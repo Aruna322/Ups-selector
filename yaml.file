@@ -2,10 +2,6 @@ name: Dell UPS Selector Test
 
 on:
   workflow_dispatch:
-  schedule:
-    # Runs daily at 9:00 AM UTC
-    # This is 2:30 PM IST
-    - cron: "0 9 * * *"
 
 jobs:
   dell-ups-test:
@@ -23,7 +19,7 @@ jobs:
       - name: Install Python packages
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install playwright
 
       - name: Install Playwright Chromium browser
         run: |
