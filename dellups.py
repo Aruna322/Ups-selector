@@ -652,18 +652,21 @@ def main():
 
     create_csv()
 
-    with sync_playwright() as p:
-      browser = p.chromium.launch(
-    headless=False,
-    args=[
-        "--no-sandbox",
-        "--disable-dev-shm-usage"
-    ]
-)
+   with sync_playwright() as p:
+    browser = p.chromium.launch(
+        headless=True,
+        args=[
+            "--no-sandbox",
+            "--disable-dev-shm-usage"
+        ]
+    )
 
-        # Open once to collect countries
-        context = browser.new_context(viewport={"width": 1440, "height": 1200})
-        page = context.new_page()
+    context = browser.new_context(
+        viewport={"width": 1440, "height": 1200}
+    )
+
+    page = context.new_page()
+    page.set_default_timeout(30000)
 
         print(f"\n🌐 Opening page to collect countries: {BASE_URL}")
 
