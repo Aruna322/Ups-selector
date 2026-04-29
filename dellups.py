@@ -653,10 +653,13 @@ def main():
     create_csv()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            slow_mo=100
-        )
+      browser = p.chromium.launch(
+    headless=True,
+    args=[
+        "--no-sandbox",
+        "--disable-dev-shm-usage"
+    ]
+)
 
         # Open once to collect countries
         context = browser.new_context(viewport={"width": 1440, "height": 1200})
