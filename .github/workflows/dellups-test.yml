@@ -1,72 +1,17 @@
-name: Dell UPS Selector Test
-
-on:
-  workflow_dispatch:
-
-jobs:
-  run-dellups-test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Show all files and branch
+      - name: Find and run dellups.py
         run: |
-          echo "Current folder:"
-          pwd
+          echo "All dellups.py files found:"
+          find . -name "dellups.py" -print
 
-          echo "Current branch/ref:"
-          git branch --show-current || true
-          git rev-parse HEAD
-
-          echo "All files:"
-          find . -maxdepth 6 -type f
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install Playwright
-        run: |
-          python -m pip install --upgrade pip
-          pip install playwright
-          python -m playwright install --with-deps chromium
-
-      - name: Find and verify dellups.py
-        run: |
-          echo "Searching for dellups.py..."
           SCRIPT_PATH=$(find . -name "dellups.py" | head -n 1)
 
-          echo "Script path found: $SCRIPT_PATH"
+          echo "Script path selected: $SCRIPT_PATH"
 
-          if [ -z "$SCRIPT_PATH" ]; then
-            echo "ERROR: dellups.py not found"
-            find . -name "*.py"
-            exit 1
-          fi
+          echo "Showing lines 650 to 670 from selected file:"
+          sed -n '650,670p' "$SCRIPT_PATH"
 
-          echo "Checking headless settings in actual file:"
-          grep -n "headless" "$SCRIPT_PATH" || true
-          grep -n "HEADLESS" "$SCRIPT_PATH" || true
+          echo "Checking syntax before running:"
+          python -m py_compile "$SCRIPT_PATH"
 
-          echo "Showing browser launch area:"
-          sed -n '640,670p' "$SCRIPT_PATH"
-
-      - name: Run dellups.py using xvfb
-        run: |
-          SCRIPT_PATH=$(find . -name "dellups.py" | head -n 1)
+          echo "Running script:"
           xvfb-run -a python "$SCRIPT_PATH"
-
-      - name: Upload report and screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dellups-results
-          path: |
-            dell_ups_test_output/
-            *.csv
-            **/*.csv
-            screenshots/
-            **/screenshots/
