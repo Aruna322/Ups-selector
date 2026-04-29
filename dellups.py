@@ -1,7 +1,6 @@
 import csv
 import os
 import re
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -25,7 +24,7 @@ CSV_FILE = os.path.join(OUTPUT_DIR, f"dell_ups_results_{TIMESTAMP}.csv")
 
 
 # ==========================================================
-# BASIC HELPERS
+# HELPERS
 # ==========================================================
 
 def create_dirs():
@@ -33,14 +32,14 @@ def create_dirs():
     Path(SCREENSHOT_DIR).mkdir(parents=True, exist_ok=True)
 
 
-def safe_filename(text):
-    text = str(text).strip()
-    text = re.sub(r"[^a-zA-Z0-9_-]+", "_", text)
-    return text[:100] if text else "unknown"
+def safe_filename(value):
+    value = str(value).strip()
+    value = re.sub(r"[^a-zA-Z0-9_-]+", "_", value)
+    return value[:100] if value else "unknown"
 
 
-def save_screenshot(page, country):
-    filename = f"{safe_filename(country)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+def save_screenshot(page, country_name):
+    filename = f"{safe_filename(country_name)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
     path = os.path.join(SCREENSHOT_DIR, filename)
 
     try:
@@ -101,31 +100,26 @@ def handle_cookie_popup(page):
 # ==========================================================
 
 def find_country_select(page):
-    """
-    Finds the real country dropdown.
-    Priority is normal <select> element.
-    """
-
-    possible_selectors = [
-        "select",
+    selectors = [
         "select[name*='country' i]",
         "select[id*='country' i]",
         "select[class*='country' i]",
+        "select",
     ]
 
-    for selector in possible_selectors:
+    for selector in selectors:
         try:
-            loc = page.locator(selector)
-            count = loc.count()
+            dropdowns = page.locator(selector)
+            count = dropdowns.count()
 
             for i in range(count):
-                item = loc.nth(i)
+                dropdown = dropdowns.nth(i)
 
                 try:
-                    if item.is_visible(timeout=1000):
-                        options_count = item.locator("option").count()
-                        if options_count > 1:
-                            return item
+                    if dropdown.is_visible(timeout=1000):
+                        option_count = dropdown.locator("option").count()
+                        if option_count > 1:
+                            return dropdown
                 except Exception:
                     continue
 
@@ -136,18 +130,14 @@ def find_country_select(page):
 
 
 def get_all_countries(page):
-    """
-    Reads all countries from dropdown.
-    """
+    print("Reading country list...")
 
-    print("Reading countries from dropdown...")
+    dropdown = find_country_select(page)
 
-    select = find_country_select(page)
-
-    if select is None:
+    if dropdown is None:
         raise Exception("Country dropdown not found")
 
-    options = select.locator("option")
+    options = dropdown.locator("option")
     option_count = options.count()
 
     countries = []
@@ -155,29 +145,22 @@ def get_all_countries(page):
     for i in range(option_count):
         try:
             option = options.nth(i)
-
             text = option.inner_text(timeout=2000).strip()
             value = option.get_attribute("value")
 
             if not text:
                 continue
 
-            skip_words = [
-                "select",
-                "choose",
-                "country",
-                "please",
-                "--",
-            ]
+            text_lower = text.lower()
 
-            if text.lower() in skip_words:
+            if text_lower in ["select", "choose", "country", "please select", "--"]:
                 continue
 
-            if "select" in text.lower() and len(text) < 20:
+            if "select" in text_lower and len(text_lower) < 25:
                 continue
 
             countries.append({
-                "text": text,
+                "name": text,
                 "value": value if value else text
             })
 
@@ -188,7 +171,7 @@ def get_all_countries(page):
     seen = set()
 
     for country in countries:
-        key = country["text"].strip().lower()
+        key = country["name"].lower().strip()
         if key not in seen:
             seen.add(key)
             unique.append(country)
@@ -198,27 +181,23 @@ def get_all_countries(page):
 
 
 def select_country(page, country):
-    """
-    Selects a country from dropdown using value first, then label fallback.
-    """
+    dropdown = find_country_select(page)
 
-    select = find_country_select(page)
-
-    if select is None:
+    if dropdown is None:
         return False, "Country dropdown not found"
 
     try:
         if country.get("value"):
-            select.select_option(value=country["value"], timeout=10000)
+            dropdown.select_option(value=country["value"], timeout=10000)
             page.wait_for_timeout(2000)
             return True, f"Selected by value: {country['value']}"
     except Exception:
         pass
 
     try:
-        select.select_option(label=country["text"], timeout=10000)
+        dropdown.select_option(label=country["name"], timeout=10000)
         page.wait_for_timeout(2000)
-        return True, f"Selected by label: {country['text']}"
+        return True, f"Selected by label: {country['name']}"
     except Exception as e:
         return False, f"Country selection failed: {str(e)}"
 
@@ -228,14 +207,8 @@ def select_country(page, country):
 # ==========================================================
 
 def click_continue_button(page):
-    """
-    Clicks Continue/Submit button after country selection.
-    """
-
-    page.wait_for_timeout(1000)
-
     try:
-        page.mouse.wheel(0, 800)
+        page.mouse.wheel(0, 900)
         page.wait_for_timeout(1000)
     except Exception:
         pass
@@ -252,18 +225,17 @@ def click_continue_button(page):
 
     for text in button_texts:
         try:
-            btn = page.get_by_role("button", name=re.compile(text, re.IGNORECASE))
-            if btn.count() > 0 and btn.first.is_visible(timeout=1500):
-                btn.first.click(timeout=5000)
+            button = page.get_by_role("button", name=re.compile(text, re.IGNORECASE))
+            if button.count() > 0 and button.first.is_visible(timeout=1500):
+                button.first.click(timeout=5000)
                 page.wait_for_timeout(4000)
-                return True, f"Clicked button by text: {text}"
+                return True, f"Clicked button: {text}"
         except Exception:
             continue
 
-    selectors = [
+    fallback_selectors = [
         "button[type='submit']",
         "input[type='submit']",
-        "button.primary",
         "button[class*='primary']",
         "button[class*='submit']",
         "button[class*='continue']",
@@ -271,27 +243,28 @@ def click_continue_button(page):
         "a[class*='button']",
     ]
 
-    for selector in selectors:
+    for selector in fallback_selectors:
         try:
-            loc = page.locator(selector)
-            count = loc.count()
+            items = page.locator(selector)
+            count = items.count()
 
             for i in range(min(count, 20)):
-                btn = loc.nth(i)
+                item = items.nth(i)
 
                 try:
-                    if not btn.is_visible(timeout=1000):
+                    if not item.is_visible(timeout=1000):
                         continue
 
                     text = ""
+
                     try:
-                        text = btn.inner_text(timeout=1000).strip()
+                        text = item.inner_text(timeout=1000).strip()
                     except Exception:
                         pass
 
-                    combined = text.lower()
+                    text_lower = text.lower()
 
-                    bad_words = [
+                    skip_words = [
                         "accept",
                         "cookie",
                         "privacy",
@@ -300,10 +273,10 @@ def click_continue_button(page):
                         "register",
                     ]
 
-                    if any(bad in combined for bad in bad_words):
+                    if any(skip in text_lower for skip in skip_words):
                         continue
 
-                    btn.click(timeout=5000)
+                    item.click(timeout=5000)
                     page.wait_for_timeout(4000)
                     return True, f"Clicked fallback button: {text}"
 
@@ -317,21 +290,21 @@ def click_continue_button(page):
 
 
 # ==========================================================
-# RESULT PAGE VALIDATION
+# RESULT VALIDATION
 # ==========================================================
 
 def check_results_page_opened(page, before_url):
     current_url = page.url
 
     if current_url != before_url:
-        return True, f"URL changed from home page to: {current_url}"
+        return True, f"URL changed to: {current_url}"
 
     try:
         body_text = page.locator("body").inner_text(timeout=5000).lower()
     except Exception:
         body_text = ""
 
-    result_indicators = [
+    result_words = [
         "results",
         "recommended",
         "products",
@@ -341,8 +314,8 @@ def check_results_page_opened(page, before_url):
         "battery backup",
     ]
 
-    if any(word in body_text for word in result_indicators):
-        return True, "Result-related content detected on page"
+    if any(word in body_text for word in result_words):
+        return True, "Result-related text detected"
 
     return False, "Result page not clearly opened"
 
@@ -372,11 +345,6 @@ def detect_no_results(page):
 
 
 def detect_products(page):
-    """
-    Detects real visible product cards/links.
-    Avoids relying only on page keywords.
-    """
-
     page.wait_for_timeout(3000)
 
     try:
@@ -386,6 +354,7 @@ def detect_products(page):
         pass
 
     no_results, no_result_text = detect_no_results(page)
+
     if no_results:
         return False, 0, f"No-result text detected: {no_result_text}"
 
@@ -401,9 +370,6 @@ def detect_products(page):
         "a[href*='product']",
         "a[href*='battery']",
     ]
-
-    found = []
-    seen = set()
 
     product_hints = [
         "apc",
@@ -436,13 +402,16 @@ def detect_products(page):
         "download",
     ]
 
+    found = []
+    seen = set()
+
     for selector in product_selectors:
         try:
-            loc = page.locator(selector)
-            count = loc.count()
+            items = page.locator(selector)
+            count = items.count()
 
             for i in range(min(count, 50)):
-                item = loc.nth(i)
+                item = items.nth(i)
 
                 try:
                     if not item.is_visible(timeout=800):
@@ -466,7 +435,7 @@ def detect_products(page):
                     if not combined:
                         continue
 
-                    if any(bad in combined for bad in ignore_hints):
+                    if any(ignore in combined for ignore in ignore_hints):
                         continue
 
                     if not any(hint in combined for hint in product_hints):
@@ -495,7 +464,7 @@ def detect_products(page):
 # ==========================================================
 
 def test_country(browser, country, index, total):
-    country_name = country["text"]
+    country_name = country["name"]
 
     print("\n==================================================")
     print(f"[{index}/{total}] Testing country: {country_name}")
@@ -519,6 +488,7 @@ def test_country(browser, country, index, total):
 
     try:
         print(f"  Opening URL: {BASE_URL}")
+
         page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
         wait_page_ready(page)
         handle_cookie_popup(page)
@@ -648,7 +618,13 @@ def main():
 
         try:
             print("\nOpening page to read country list...")
-            setup_page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
+
+            setup_page.goto(
+                BASE_URL,
+                wait_until="domcontentloaded",
+                timeout=60000
+            )
+
             wait_page_ready(setup_page)
             handle_cookie_popup(setup_page)
 
