@@ -3,6 +3,22 @@ name: Dell UPS Selector Test
 on:
   workflow_dispatch:
 
+  push:
+    branches:
+      - main
+    paths:
+      - "dellups.py"
+      - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "dellups.py"
+      - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
+
 jobs:
   run-dellups-test:
     runs-on: ubuntu-latest
