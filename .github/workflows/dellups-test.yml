@@ -11,11 +11,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show all files
+      - name: Show all files and branch
         run: |
           echo "Current folder:"
           pwd
-          echo "All files in repo:"
+
+          echo "Current branch/ref:"
+          git branch --show-current || true
+          git rev-parse HEAD
+
+          echo "All files:"
           find . -maxdepth 6 -type f
 
       - name: Setup Python
@@ -29,7 +34,7 @@ jobs:
           pip install playwright
           python -m playwright install --with-deps chromium
 
-      - name: Find and run dellups.py
+      - name: Find and verify dellups.py
         run: |
           echo "Searching for dellups.py..."
           SCRIPT_PATH=$(find . -name "dellups.py" | head -n 1)
@@ -38,11 +43,20 @@ jobs:
 
           if [ -z "$SCRIPT_PATH" ]; then
             echo "ERROR: dellups.py not found"
-            echo "Python files available:"
             find . -name "*.py"
             exit 1
           fi
 
+          echo "Checking headless settings in actual file:"
+          grep -n "headless" "$SCRIPT_PATH" || true
+          grep -n "HEADLESS" "$SCRIPT_PATH" || true
+
+          echo "Showing browser launch area:"
+          sed -n '640,670p' "$SCRIPT_PATH"
+
+      - name: Run dellups.py using xvfb
+        run: |
+          SCRIPT_PATH=$(find . -name "dellups.py" | head -n 1)
           xvfb-run -a python "$SCRIPT_PATH"
 
       - name: Upload report and screenshots
