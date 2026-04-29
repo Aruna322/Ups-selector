@@ -1,8 +1,11 @@
-from playwright.sync_api import sync_playwright
-from datetime import datetime
-import os
 import csv
+import os
 import re
+import time
+from datetime import datetime
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 
 # ==========================================================
@@ -11,136 +14,84 @@ import re
 
 BASE_URL = "https://dellups.com/ups-selector/"
 
+HEADLESS = True
+TIMEOUT = 30000
+
 OUTPUT_DIR = "dell_ups_test_output"
 SCREENSHOT_DIR = os.path.join(OUTPUT_DIR, "screenshots")
 
-os.makedirs(SCREENSHOT_DIR, exist_ok=True)
-
-RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
-CSV_FILE = os.path.join(OUTPUT_DIR, f"dell_ups_results_{RUN_ID}.csv")
-
-CSV_COLUMNS = [
-    "Country",
-    "Results Page Opened",
-    "Status",
-    "Reason",
-    "Continue Clicked",
-    "Products Count",
-    "Screenshot",
-]
+TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+CSV_FILE = os.path.join(OUTPUT_DIR, f"dell_ups_results_{TIMESTAMP}.csv")
 
 
 # ==========================================================
-# HELPERS
+# BASIC HELPERS
 # ==========================================================
 
-def safe_name(name):
-    name = re.sub(r"[^\w\s-]", "", name)
-    name = re.sub(r"\s+", "_", name.strip())
-    return name
+def create_dirs():
+    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    Path(SCREENSHOT_DIR).mkdir(parents=True, exist_ok=True)
 
 
-def save_screenshot(page, country, step):
-    file_name = f"{safe_name(country)}_{step}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-    path = os.path.join(SCREENSHOT_DIR, file_name)
+def safe_filename(text):
+    text = str(text).strip()
+    text = re.sub(r"[^a-zA-Z0-9_-]+", "_", text)
+    return text[:100] if text else "unknown"
+
+
+def save_screenshot(page, country):
+    filename = f"{safe_filename(country)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+    path = os.path.join(SCREENSHOT_DIR, filename)
 
     try:
         page.screenshot(path=path, full_page=True)
-        print(f"  📸 Screenshot saved: {path}")
         return path
-    except Exception as e:
-        print(f"  ⚠ Screenshot failed: {e}")
+    except Exception:
         return ""
 
 
-def wait_page(page):
+def wait_page_ready(page):
     try:
-        page.wait_for_load_state("domcontentloaded", timeout=15000)
-    except:
+        page.wait_for_load_state("domcontentloaded", timeout=TIMEOUT)
+    except Exception:
         pass
 
     try:
         page.wait_for_load_state("networkidle", timeout=15000)
-    except:
+    except Exception:
         pass
 
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(2000)
 
 
-def scroll_down(page, times=4, distance=500):
-    for _ in range(times):
-        page.mouse.wheel(0, distance)
-        page.wait_for_timeout(400)
-
-
-def get_text(el):
-    try:
-        text = el.inner_text(timeout=1000).strip()
-        if text:
-            return text
-    except:
-        pass
-
-    try:
-        return el.evaluate("""
-            e => (
-                e.innerText ||
-                e.textContent ||
-                e.value ||
-                e.getAttribute('aria-label') ||
-                e.getAttribute('title') ||
-                ''
-            ).trim()
-        """)
-    except:
-        return ""
-
-
-def is_blue_button(el):
-    """
-    Dell Continue button is blue/cyan.
-    Example: rgb(66, 180, 230)
-    """
-    try:
-        bg = el.evaluate("e => window.getComputedStyle(e).backgroundColor")
-        nums = re.findall(r"\d+", bg)
-
-        if len(nums) < 3:
-            return False, bg
-
-        r = int(nums[0])
-        g = int(nums[1])
-        b = int(nums[2])
-
-        is_blue = b >= 120 and g >= 100 and r <= 180
-
-        return is_blue, bg
-
-    except:
-        return False, ""
-
+# ==========================================================
+# COOKIE HANDLING
+# ==========================================================
 
 def handle_cookie_popup(page):
     selectors = [
         "#onetrust-accept-btn-handler",
         "button:has-text('Accept')",
         "button:has-text('Accept All')",
-        "button:has-text('I Accept')",
-        "button:has-text('OK')",
-        "button:has-text('Agree')",
+        "button:has-text('Accept all')",
         "button:has-text('Allow all')",
+        "button:has-text('I Agree')",
+        "button:has-text('Agree')",
+        "button:has-text('OK')",
+        "button[id*='accept']",
+        "button[class*='accept']",
     ]
 
     for selector in selectors:
         try:
-            btn = page.locator(selector).first
-            if btn.is_visible(timeout=1500):
-                btn.click(timeout=5000)
+            locator = page.locator(selector)
+            if locator.count() > 0 and locator.first.is_visible(timeout=1000):
+                locator.first.click(timeout=3000)
                 page.wait_for_timeout(1000)
-                print(f"  ✅ Cookie popup handled: {selector}")
+                print("  ✓ Cookie popup handled")
                 return True
-        except:
-            pass
+        except Exception:
+            continue
 
     return False
 
@@ -149,493 +100,519 @@ def handle_cookie_popup(page):
 # COUNTRY DROPDOWN
 # ==========================================================
 
-def get_all_countries(page):
-    print("\n📋 Reading countries from dropdown...")
+def find_country_select(page):
+    """
+    Finds the real country dropdown.
+    Priority is normal <select> element.
+    """
 
-    dropdown = page.locator("select").first
-    dropdown.wait_for(state="visible", timeout=10000)
+    possible_selectors = [
+        "select",
+        "select[name*='country' i]",
+        "select[id*='country' i]",
+        "select[class*='country' i]",
+    ]
+
+    for selector in possible_selectors:
+        try:
+            loc = page.locator(selector)
+            count = loc.count()
+
+            for i in range(count):
+                item = loc.nth(i)
+
+                try:
+                    if item.is_visible(timeout=1000):
+                        options_count = item.locator("option").count()
+                        if options_count > 1:
+                            return item
+                except Exception:
+                    continue
+
+        except Exception:
+            continue
+
+    return None
+
+
+def get_all_countries(page):
+    """
+    Reads all countries from dropdown.
+    """
+
+    print("Reading countries from dropdown...")
+
+    select = find_country_select(page)
+
+    if select is None:
+        raise Exception("Country dropdown not found")
+
+    options = select.locator("option")
+    option_count = options.count()
 
     countries = []
-    options = dropdown.locator("option")
 
-    for i in range(options.count()):
-        label = options.nth(i).inner_text().strip()
-        value = options.nth(i).get_attribute("value") or ""
+    for i in range(option_count):
+        try:
+            option = options.nth(i)
 
-        if not label:
+            text = option.inner_text(timeout=2000).strip()
+            value = option.get_attribute("value")
+
+            if not text:
+                continue
+
+            skip_words = [
+                "select",
+                "choose",
+                "country",
+                "please",
+                "--",
+            ]
+
+            if text.lower() in skip_words:
+                continue
+
+            if "select" in text.lower() and len(text) < 20:
+                continue
+
+            countries.append({
+                "text": text,
+                "value": value if value else text
+            })
+
+        except Exception:
             continue
 
-        label_lower = label.lower()
+    unique = []
+    seen = set()
 
-        if label_lower in ["select", "select country", "choose country", "country"]:
-            continue
+    for country in countries:
+        key = country["text"].strip().lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(country)
 
-        if "select" in label_lower and not value:
-            continue
-
-        countries.append(label)
-
-    print(f"✅ Countries found: {len(countries)}")
-    return countries
+    print(f"Countries found: {len(unique)}")
+    return unique
 
 
 def select_country(page, country):
-    print(f"  🌍 Selecting country: {country}")
+    """
+    Selects a country from dropdown using value first, then label fallback.
+    """
 
-    dropdown = page.locator("select").first
-    dropdown.wait_for(state="visible", timeout=10000)
+    select = find_country_select(page)
+
+    if select is None:
+        return False, "Country dropdown not found"
 
     try:
-        dropdown.select_option(label=country)
-        page.wait_for_timeout(3000)
-        print("  ✅ Country selected")
-        return True
+        if country.get("value"):
+            select.select_option(value=country["value"], timeout=10000)
+            page.wait_for_timeout(2000)
+            return True, f"Selected by value: {country['value']}"
+    except Exception:
+        pass
+
+    try:
+        select.select_option(label=country["text"], timeout=10000)
+        page.wait_for_timeout(2000)
+        return True, f"Selected by label: {country['text']}"
     except Exception as e:
-        print(f"  ❌ Country selection failed: {e}")
-        return False
+        return False, f"Country selection failed: {str(e)}"
 
 
 # ==========================================================
-# CLICK CONTINUE BUTTON
+# CONTINUE BUTTON
 # ==========================================================
 
-def click_continue_button(page, country):
+def click_continue_button(page):
     """
-    Final practical logic:
-    - After country selection, scroll down.
-    - Click visible Dell blue button inside page body.
-    - Do not click Select Your Region / menu buttons.
-    - Empty text is allowed because Dell Continue button sometimes shows empty in DOM.
+    Clicks Continue/Submit button after country selection.
     """
 
-    print("  ➡ Looking for blue Continue button...")
+    page.wait_for_timeout(1000)
 
-    page.wait_for_timeout(2000)
+    try:
+        page.mouse.wheel(0, 800)
+        page.wait_for_timeout(1000)
+    except Exception:
+        pass
 
-    scroll_down(page, times=5, distance=450)
-
-    elements = page.locator(
-        "button, input[type='button'], input[type='submit'], a[role='button']"
-    )
-
-    blocked_texts = [
-        "select your region",
-        "products",
-        "software and services",
-        "resources",
-        "contact",
-        "support",
-        "menu",
-        "filter by",
-        "change requirements",
+    button_texts = [
+        "Continue",
+        "Submit",
+        "Next",
+        "Search",
+        "Go",
+        "Find",
+        "Show Results",
     ]
 
-    candidates = []
-
-    total = elements.count()
-    print(f"  Total button-like elements found: {total}")
-
-    for i in range(total):
+    for text in button_texts:
         try:
-            el = elements.nth(i)
+            btn = page.get_by_role("button", name=re.compile(text, re.IGNORECASE))
+            if btn.count() > 0 and btn.first.is_visible(timeout=1500):
+                btn.first.click(timeout=5000)
+                page.wait_for_timeout(4000)
+                return True, f"Clicked button by text: {text}"
+        except Exception:
+            continue
 
-            if not el.is_visible(timeout=1000):
-                continue
+    selectors = [
+        "button[type='submit']",
+        "input[type='submit']",
+        "button.primary",
+        "button[class*='primary']",
+        "button[class*='submit']",
+        "button[class*='continue']",
+        "button",
+        "a[class*='button']",
+    ]
 
-            if not el.is_enabled(timeout=1000):
-                continue
+    for selector in selectors:
+        try:
+            loc = page.locator(selector)
+            count = loc.count()
 
-            box = el.bounding_box()
-            if not box:
-                continue
+            for i in range(min(count, 20)):
+                btn = loc.nth(i)
 
-            if box["width"] < 70 or box["height"] < 25:
-                continue
+                try:
+                    if not btn.is_visible(timeout=1000):
+                        continue
 
-            text = get_text(el).strip()
-            text_lower = text.lower()
+                    text = ""
+                    try:
+                        text = btn.inner_text(timeout=1000).strip()
+                    except Exception:
+                        pass
 
-            is_blue, bg = is_blue_button(el)
+                    combined = text.lower()
 
-            print(
-                f"    Button: text='{text}' blue={is_blue} bg='{bg}' "
-                f"x={round(box['x'],1)} y={round(box['y'],1)} "
-                f"w={round(box['width'],1)} h={round(box['height'],1)}"
-            )
+                    bad_words = [
+                        "accept",
+                        "cookie",
+                        "privacy",
+                        "terms",
+                        "login",
+                        "register",
+                    ]
 
-            if text_lower and any(bad in text_lower for bad in blocked_texts):
-                print(f"    Skipped blocked button: '{text}'")
-                continue
+                    if any(bad in combined for bad in bad_words):
+                        continue
 
-            if not is_blue:
-                continue
+                    btn.click(timeout=5000)
+                    page.wait_for_timeout(4000)
+                    return True, f"Clicked fallback button: {text}"
 
-            # Avoid top/header area. Continue button is in page body.
-            if box["y"] < 100:
-                continue
+                except Exception:
+                    continue
 
-            candidates.append({
-                "element": el,
-                "text": text,
-                "box": box,
-                "bg": bg,
-            })
+        except Exception:
+            continue
 
-        except Exception as e:
-            print(f"    ⚠ Button check failed: {e}")
-
-    if not candidates:
-        print("  ❌ No blue Continue button found")
-        save_screenshot(page, country, "continue_not_found")
-        return False
-
-    # Pick top-most blue button in body content.
-    candidates.sort(key=lambda x: x["box"]["y"])
-
-    btn = candidates[0]
-    el = btn["element"]
-    text = btn["text"] or "BLUE_CONTINUE_BUTTON"
-
-    try:
-        el.scroll_into_view_if_needed(timeout=5000)
-        page.wait_for_timeout(500)
-
-        save_screenshot(page, country, "before_continue_click")
-
-        el.click(timeout=10000)
-
-        print(f"  ✅ Continue clicked: text='{text}', bg='{btn['bg']}'")
-
-        page.wait_for_timeout(5000)
-        wait_page(page)
-
-        return True
-
-    except Exception as e:
-        print(f"  ❌ Continue click failed: {e}")
-        save_screenshot(page, country, "continue_click_failed")
-        return False
+    return False, "Continue/Submit button not found"
 
 
 # ==========================================================
-# RESULT VALIDATION
+# RESULT PAGE VALIDATION
 # ==========================================================
 
-def verify_results(page, country):
-    """
-    Validation:
-    - FAIL only for real no-result pages:
-      0 Results / 0 Ergebnisse / Nothing found / no results found
-    - PASS for product pages:
-      50 Results / 50 Ergebnisse / APC Smart-UPS / UPS Batteries / model numbers
-    """
+def check_results_page_opened(page, before_url):
+    current_url = page.url
 
-    print("  🔎 Verifying product page...")
-
-    page.wait_for_timeout(5000)
-
-    screenshot = save_screenshot(page, country, "result_page")
+    if current_url != before_url:
+        return True, f"URL changed from home page to: {current_url}"
 
     try:
-        body_text = page.locator("body").inner_text(timeout=10000)
-    except:
+        body_text = page.locator("body").inner_text(timeout=5000).lower()
+    except Exception:
         body_text = ""
 
-    body_lower = body_text.lower()
-
-    # ======================================================
-    # 1. FAIL only when real no-product message is visible
-    # IMPORTANT:
-    # Do not use plain "0 result" because "50 Results" contains "0 result".
-    # ======================================================
-
-    no_result_patterns = [
-        r"\b0\s+results?\b",
-        r"\b0\s+ergebnisse\b",
-        r"\b0\s+résultats?\b",
-        r"\b0\s+resultados?\b",
-        r"\b0\s+risultati?\b",
-        r"\b0\s+resultaten\b",
+    result_indicators = [
+        "results",
+        "recommended",
+        "products",
+        "product",
+        "ups",
+        "apc",
+        "battery backup",
     ]
+
+    if any(word in body_text for word in result_indicators):
+        return True, "Result-related content detected on page"
+
+    return False, "Result page not clearly opened"
+
+
+def detect_no_results(page):
+    try:
+        body_text = page.locator("body").inner_text(timeout=5000).lower()
+    except Exception:
+        return False, ""
 
     no_result_texts = [
+        "0 results",
+        "no results",
         "nothing found",
-        "no results found",
-        "no products found",
-        "there are no results found",
-        "sorry, there are no results found",
-        "aucun résultat",
-        "aucun produit",
-        "sin resultados",
-        "sin productos",
-        "sem resultados",
-        "sem produtos",
-        "keine ergebnisse",
-        "keine produkte",
-        "nessun risultato",
-        "nessun prodotto",
-        "нет результатов",
-        "товары не найдены",
+        "no product",
+        "no products",
+        "no matching",
+        "not found",
+        "no ups",
     ]
-
-    for pattern in no_result_patterns:
-        if re.search(pattern, body_lower):
-            print(f"  ❌ FAIL: Found no-result pattern: {pattern}")
-            screenshot = save_screenshot(page, country, "fail_nothing_found")
-            return "YES", "FAIL", f"No products: {pattern}", 0, screenshot
 
     for text in no_result_texts:
-        if text in body_lower:
-            print(f"  ❌ FAIL: Found no-result text: {text}")
-            screenshot = save_screenshot(page, country, "fail_nothing_found")
-            return "YES", "FAIL", f"No products: {text}", 0, screenshot
+        if text in body_text:
+            return True, text
 
-    # ======================================================
-    # 2. PASS if result count is visible
-    # Examples:
-    # 50 Results
-    # 50 Ergebnisse für 200 W
-    # ======================================================
-
-    count_patterns = [
-        r"\b(\d+)\s+results?\b",
-        r"\b(\d+)\s+ergebnisse\b",
-        r"\b(\d+)\s+résultats?\b",
-        r"\b(\d+)\s+resultados?\b",
-        r"\b(\d+)\s+risultati?\b",
-        r"\b(\d+)\s+resultaten\b",
-    ]
-
-    for pattern in count_patterns:
-        match = re.search(pattern, body_lower)
-        if match:
-            products_count = int(match.group(1))
-
-            if products_count > 0:
-                print(f"  ✅ PASS: Product count found: {products_count}")
-                screenshot = save_screenshot(page, country, "pass_product_count")
-                return "YES", "PASS", f"Products found: {products_count}", products_count, screenshot
-
-    # ======================================================
-    # 3. PASS if known product text is visible
-    # ======================================================
-
-    product_text_words = [
-        "apc smart-ups",
-        "smart-ups",
-        "easy ups",
-        "easy-ups",
-        "back-ups",
-        "symmetra",
-        "galaxy",
-        "ups batteries",
-        "ups battery",
-        "battery backup",
-        "replacement battery",
-        "battery cartridge",
-        "battery pack",
-        "battery cabinet",
-        "beste übereinstimmung",
-        "best match",
-        "ansprechpartner vertrieb",
-        "gesamtleistungsaufnahme",
-        "überbrückungszeit",
-        "maximal verwendete leistung",
-    ]
-
-    matched_product_words = []
-
-    for word in product_text_words:
-        if word in body_lower:
-            matched_product_words.append(word)
-
-    if matched_product_words:
-        print(f"  ✅ PASS: Product text found: {matched_product_words}")
-        screenshot = save_screenshot(page, country, "pass_product_text")
-        return (
-            "YES",
-            "PASS",
-            f"Product text found: {', '.join(matched_product_words[:5])}",
-            len(matched_product_words),
-            screenshot,
-        )
-
-    # ======================================================
-    # 4. PASS if product model numbers are visible
-    # Examples: SU420INET, SUVS420I, SMT750I, SRT1000XLI
-    # ======================================================
-
-    model_patterns = [
-        r"\bSU[A-Z0-9]{3,}\b",
-        r"\bSUA[A-Z0-9]{3,}\b",
-        r"\bSUVS[A-Z0-9]{3,}\b",
-        r"\bSMT[A-Z0-9]{3,}\b",
-        r"\bSRT[A-Z0-9]{3,}\b",
-        r"\bBX[A-Z0-9]{3,}\b",
-        r"\bBR[A-Z0-9]{3,}\b",
-    ]
-
-    found_models = []
-
-    for pattern in model_patterns:
-        matches = re.findall(pattern, body_text, flags=re.IGNORECASE)
-        found_models.extend(matches)
-
-    unique_models = sorted(list(set(found_models)))
-
-    if unique_models:
-        print(f"  ✅ PASS: Product model numbers found: {unique_models[:10]}")
-        screenshot = save_screenshot(page, country, "pass_model_numbers")
-        return (
-            "YES",
-            "PASS",
-            f"Product models found: {', '.join(unique_models[:5])}",
-            len(unique_models),
-            screenshot,
-        )
-
-    # ======================================================
-    # 5. PASS if product elements/cards/rows are visible
-    # ======================================================
-
-    scroll_down(page, times=3, distance=600)
-
-    product_row_selectors = [
-        "text=APC Smart-UPS",
-        "text=Smart-UPS",
-        "text=Easy UPS",
-        "text=Back-UPS",
-        "text=Symmetra",
-        "text=Galaxy",
-        "text=UPS Batteries",
-        "text=Ansprechpartner Vertrieb",
-        "text=Beste Übereinstimmung",
-        "text=Best Match",
-        "a[href*='product']",
-        "a[href*='ups']",
-        "a[href*='battery']",
-        "[class*='product']",
-        "[class*='Product']",
-    ]
-
-    visible_product_elements = 0
-
-    for selector in product_row_selectors:
-        try:
-            items = page.locator(selector)
-            total = items.count()
-
-            for i in range(min(total, 60)):
-                try:
-                    item = items.nth(i)
-
-                    if item.is_visible(timeout=500):
-                        visible_product_elements += 1
-                except:
-                    pass
-
-        except:
-            pass
-
-    if visible_product_elements > 0:
-        print(f"  ✅ PASS: Product elements visible: {visible_product_elements}")
-        screenshot = save_screenshot(page, country, "pass_product_elements")
-        return (
-            "YES",
-            "PASS",
-            f"Product elements visible: {visible_product_elements}",
-            visible_product_elements,
-            screenshot,
-        )
-
-    # ======================================================
-    # 6. FINAL FAIL
-    # ======================================================
-
-    print("  ❌ FAIL: No product cards/products visible")
-    screenshot = save_screenshot(page, country, "fail_no_products_visible")
-    return "YES", "FAIL", "No product cards/products visible", 0, screenshot
+    return False, ""
 
 
-# ==========================================================
-# TEST ONE COUNTRY
-# ==========================================================
+def detect_products(page):
+    """
+    Detects real visible product cards/links.
+    Avoids relying only on page keywords.
+    """
 
-def test_country(browser, country):
-    row = {
-        "Country": country,
-        "Results Page Opened": "NO",
-        "Status": "FAIL",
-        "Reason": "",
-        "Continue Clicked": "NO",
-        "Products Count": 0,
-        "Screenshot": "",
-    }
-
-    context = browser.new_context(viewport={"width": 1440, "height": 1200})
-    page = context.new_page()
+    page.wait_for_timeout(3000)
 
     try:
-        print(f"\n🌐 Opening fresh page for: {country}")
+        page.mouse.wheel(0, 1000)
+        page.wait_for_timeout(1000)
+    except Exception:
+        pass
 
+    no_results, no_result_text = detect_no_results(page)
+    if no_results:
+        return False, 0, f"No-result text detected: {no_result_text}"
+
+    product_selectors = [
+        "[class*='product']",
+        "[class*='Product']",
+        "[class*='result']",
+        "[class*='Result']",
+        "[class*='card']",
+        "[class*='Card']",
+        "a[href*='ups']",
+        "a[href*='apc']",
+        "a[href*='product']",
+        "a[href*='battery']",
+    ]
+
+    found = []
+    seen = set()
+
+    product_hints = [
+        "apc",
+        "ups",
+        "va",
+        "watt",
+        "battery",
+        "backup",
+        "back-ups",
+        "easy ups",
+        "smart ups",
+        "bx",
+        "br",
+        "be",
+    ]
+
+    ignore_hints = [
+        "cookie",
+        "privacy",
+        "terms",
+        "contact",
+        "support",
+        "login",
+        "register",
+        "facebook",
+        "linkedin",
+        "youtube",
+        "twitter",
+        "instagram",
+        "download",
+    ]
+
+    for selector in product_selectors:
+        try:
+            loc = page.locator(selector)
+            count = loc.count()
+
+            for i in range(min(count, 50)):
+                item = loc.nth(i)
+
+                try:
+                    if not item.is_visible(timeout=800):
+                        continue
+
+                    text = ""
+                    href = ""
+
+                    try:
+                        text = item.inner_text(timeout=1000).strip()
+                    except Exception:
+                        pass
+
+                    try:
+                        href = item.get_attribute("href") or ""
+                    except Exception:
+                        pass
+
+                    combined = f"{text} {href}".lower().strip()
+
+                    if not combined:
+                        continue
+
+                    if any(bad in combined for bad in ignore_hints):
+                        continue
+
+                    if not any(hint in combined for hint in product_hints):
+                        continue
+
+                    key = combined[:250]
+
+                    if key not in seen:
+                        seen.add(key)
+                        found.append(combined)
+
+                except Exception:
+                    continue
+
+        except Exception:
+            continue
+
+    if found:
+        return True, len(found), f"Visible product indicators detected: {len(found)}"
+
+    return False, 0, "No visible product cards/items detected"
+
+
+# ==========================================================
+# TEST SINGLE COUNTRY
+# ==========================================================
+
+def test_country(browser, country, index, total):
+    country_name = country["text"]
+
+    print("\n==================================================")
+    print(f"[{index}/{total}] Testing country: {country_name}")
+    print("==================================================")
+
+    context = browser.new_context(
+        viewport={"width": 1440, "height": 1200},
+        ignore_https_errors=True
+    )
+
+    page = context.new_page()
+    page.set_default_timeout(TIMEOUT)
+
+    status = "FAIL"
+    results_page_opened = "NO"
+    products_detected = 0
+    reason = ""
+    continue_clicked = "NO"
+    screenshot = ""
+    final_url = ""
+
+    try:
+        print(f"  Opening URL: {BASE_URL}")
         page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
-        wait_page(page)
-
+        wait_page_ready(page)
         handle_cookie_popup(page)
 
-        selected = select_country(page, country)
+        before_url = page.url
+
+        selected, selected_reason = select_country(page, country)
 
         if not selected:
-            row["Reason"] = "Country selection failed"
-            row["Screenshot"] = save_screenshot(page, country, "country_selection_failed")
-            return row
+            reason = selected_reason
+            screenshot = save_screenshot(page, country_name)
+            final_url = page.url
 
-        save_screenshot(page, country, "after_country_selection")
+            print(f"  ✗ {reason}")
 
-        clicked = click_continue_button(page, country)
+            return [
+                country_name,
+                results_page_opened,
+                status,
+                reason,
+                continue_clicked,
+                products_detected,
+                final_url,
+                screenshot,
+            ]
 
-        if not clicked:
-            row["Continue Clicked"] = "NO"
-            row["Reason"] = "Continue button not clicked"
-            row["Screenshot"] = save_screenshot(page, country, "continue_not_clicked")
-            return row
+        print(f"  ✓ {selected_reason}")
 
-        row["Continue Clicked"] = "YES"
+        clicked, click_reason = click_continue_button(page)
 
-        opened, status, reason, count, screenshot = verify_results(page, country)
+        if clicked:
+            continue_clicked = "YES"
+            print(f"  ✓ {click_reason}")
+        else:
+            continue_clicked = "NO"
+            print(f"  ⚠ {click_reason}")
 
-        row["Results Page Opened"] = opened
-        row["Status"] = status
-        row["Reason"] = reason
-        row["Products Count"] = count
-        row["Screenshot"] = screenshot
+        wait_page_ready(page)
 
-        return row
+        opened, opened_reason = check_results_page_opened(page, before_url)
+
+        if opened:
+            results_page_opened = "YES"
+            print(f"  ✓ Results page opened: {opened_reason}")
+        else:
+            results_page_opened = "NO"
+            print(f"  ⚠ Results page not clear: {opened_reason}")
+
+        products_found, products_detected, product_reason = detect_products(page)
+
+        final_url = page.url
+        screenshot = save_screenshot(page, country_name)
+
+        if opened and products_found:
+            status = "PASS"
+            reason = product_reason
+        elif not opened:
+            status = "FAIL"
+            reason = opened_reason
+        else:
+            status = "FAIL"
+            reason = product_reason
+
+        print(f"  Status: {status}")
+        print(f"  Products Detected: {products_detected}")
+        print(f"  Reason: {reason}")
+        print(f"  Final URL: {final_url}")
+        print(f"  Screenshot: {screenshot}")
 
     except Exception as e:
-        row["Status"] = "FAIL"
-        row["Reason"] = f"Unexpected error: {e}"
-        row["Screenshot"] = save_screenshot(page, country, "unexpected_error")
-        return row
+        status = "FAIL"
+        reason = f"Exception: {str(e)}"
+        final_url = page.url
+
+        try:
+            screenshot = save_screenshot(page, country_name)
+        except Exception:
+            screenshot = ""
+
+        print(f"  ✗ Exception: {str(e)}")
 
     finally:
         context.close()
 
-
-# ==========================================================
-# CSV
-# ==========================================================
-
-def create_csv():
-    with open(CSV_FILE, "w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=CSV_COLUMNS)
-        writer.writeheader()
-
-
-def write_csv_row(row):
-    with open(CSV_FILE, "a", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=CSV_COLUMNS)
-        writer.writerow(row)
+    return [
+        country_name,
+        results_page_opened,
+        status,
+        reason,
+        continue_clicked,
+        products_detected,
+        final_url,
+        screenshot,
+    ]
 
 
 # ==========================================================
@@ -643,6 +620,8 @@ def write_csv_row(row):
 # ==========================================================
 
 def main():
+    create_dirs()
+
     print("==================================================")
     print("Dell UPS Selector - All Countries Test")
     print("==================================================")
@@ -650,69 +629,66 @@ def main():
     print(f"CSV Report: {CSV_FILE}")
     print(f"Screenshots Folder: {SCREENSHOT_DIR}")
 
-    create_csv()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=HEADLESS,
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage"
+            ]
+        )
 
-  with sync_playwright() as p:
-    browser = p.chromium.launch(
-        headless=True,
-        args=[
-            "--no-sandbox",
-            "--disable-dev-shm-usage"
-        ]
-    )
+        setup_context = browser.new_context(
+            viewport={"width": 1440, "height": 1200},
+            ignore_https_errors=True
+        )
 
-    context = browser.new_context(
-        viewport={"width": 1440, "height": 1200}
-    )
+        setup_page = setup_context.new_page()
+        setup_page.set_default_timeout(TIMEOUT)
 
-    page = context.new_page()
-    page.set_default_timeout(30000)
+        try:
+            print("\nOpening page to read country list...")
+            setup_page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
+            wait_page_ready(setup_page)
+            handle_cookie_popup(setup_page)
 
-        print(f"\n🌐 Opening page to collect countries: {BASE_URL}")
+            countries = get_all_countries(setup_page)
 
-        page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
-        wait_page(page)
-        handle_cookie_popup(page)
-
-        countries = get_all_countries(page)
-
-        context.close()
+        finally:
+            setup_context.close()
 
         if not countries:
-            print("\n❌ No countries found. Stopping.")
             browser.close()
-            return
+            raise Exception("No countries found from dropdown")
 
-        print(f"\n📋 Total countries to test: {len(countries)}")
+        with open(CSV_FILE, "w", newline="", encoding="utf-8-sig") as csv_file:
+            writer = csv.writer(csv_file)
 
-        pass_count = 0
-        fail_count = 0
+            writer.writerow([
+                "Country",
+                "Results Page Opened",
+                "Status",
+                "Reason",
+                "Continue Clicked",
+                "Products Detected",
+                "Final URL",
+                "Screenshot",
+            ])
 
-        for index, country in enumerate(countries, start=1):
-            print("\n--------------------------------------------------")
-            print(f"[{index}/{len(countries)}] Testing: {country}")
-            print("--------------------------------------------------")
+            total = len(countries)
 
-            row = test_country(browser, country)
-            write_csv_row(row)
-
-            if row["Status"] == "PASS":
-                pass_count += 1
-                print(f"✅ PASS | {country} | {row['Reason']}")
-            else:
-                fail_count += 1
-                print(f"❌ FAIL | {country} | {row['Reason']}")
+            for index, country in enumerate(countries, start=1):
+                row = test_country(browser, country, index, total)
+                writer.writerow(row)
+                csv_file.flush()
 
         browser.close()
 
-        print("\n==================================================")
-        print("TEST COMPLETED")
-        print("==================================================")
-        print(f"Total countries: {len(countries)}")
-        print(f"PASS: {pass_count}")
-        print(f"FAIL: {fail_count}")
-        print(f"CSV Report: {CSV_FILE}")
-        print(f"Screenshots Folder: {SCREENSHOT_DIR}")
+    print("\n==================================================")
+    print("TEST COMPLETED")
+    print(f"CSV Report saved: {CSV_FILE}")
+    print(f"Screenshots saved: {SCREENSHOT_DIR}")
+    print("==================================================")
 
 
 if __name__ == "__main__":
