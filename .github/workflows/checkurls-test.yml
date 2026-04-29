@@ -8,6 +8,7 @@ on:
       - main
     paths:
       - "checkurls.py"
+      - "urls-bothupsrbc.txt"
       - ".github/workflows/*.yml"
       - ".github/workflows/*.yaml"
 
@@ -16,6 +17,7 @@ on:
       - main
     paths:
       - "checkurls.py"
+      - "urls-bothupsrbc.txt"
       - ".github/workflows/*.yml"
       - ".github/workflows/*.yaml"
 
@@ -39,20 +41,23 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Playwright
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install playwright
+          pip install playwright requests beautifulsoup4 pandas
           python -m playwright install --with-deps chromium
 
       - name: Create output folders
         run: |
+          mkdir -p checkurls_output
           mkdir -p checkurls_output/screenshots
 
-      - name: Check Python syntax
+      - name: Check required files
         run: |
+          echo "Checking required files..."
+
           SCRIPT_PATH=$(find . -name "checkurls.py" | head -n 1)
-          echo "Script path found: $SCRIPT_PATH"
+          echo "checkurls.py path: $SCRIPT_PATH"
 
           if [ -z "$SCRIPT_PATH" ]; then
             echo "ERROR: checkurls.py not found"
@@ -61,6 +66,21 @@ jobs:
             exit 1
           fi
 
+          if [ ! -f "urls-bothupsrbc.txt" ]; then
+            echo "ERROR: urls-bothupsrbc.txt not found in repo root"
+            echo "Please add urls-bothupsrbc.txt in the main repo folder"
+            echo "Example repo structure:"
+            echo "  checkurls.py"
+            echo "  urls-bothupsrbc.txt"
+            echo "  .github/workflows/checkurls-test.yml"
+            exit 1
+          fi
+
+          echo "Required files found."
+
+      - name: Check Python syntax
+        run: |
+          SCRIPT_PATH=$(find . -name "checkurls.py" | head -n 1)
           python -m py_compile "$SCRIPT_PATH"
 
       - name: Run checkurls.py
@@ -74,8 +94,10 @@ jobs:
         run: |
           echo "After test run, files are:"
           find . -maxdepth 6 -type f
+
           echo "checkurls_output folder:"
           ls -la checkurls_output || true
+
           echo "screenshots folder:"
           ls -la checkurls_output/screenshots || true
 
@@ -88,6 +110,8 @@ jobs:
           path: |
             checkurls_output/**
             **/*.csv
-            **/*.png
+            **/*.xlsx
             **/*.html
             **/*.json
+            **/*.png
+            **/*.txt
