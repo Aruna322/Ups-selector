@@ -29,21 +29,21 @@ jobs:
           pip install playwright
           python -m playwright install --with-deps chromium
 
-      - name: Find dellups.py and check syntax
+      - name: Create output folders
         run: |
-          echo "Searching for dellups.py..."
-          SCRIPT_PATH=$(find . -name "dellups.py" | head -n 1)
+          mkdir -p dell_ups_test_output/screenshots
 
+      - name: Check Python syntax
+        run: |
+          SCRIPT_PATH=$(find . -name "dellups.py" | head -n 1)
           echo "Script path found: $SCRIPT_PATH"
 
           if [ -z "$SCRIPT_PATH" ]; then
             echo "ERROR: dellups.py not found"
-            echo "Python files available:"
             find . -name "*.py"
             exit 1
           fi
 
-          echo "Checking Python syntax..."
           python -m py_compile "$SCRIPT_PATH"
 
       - name: Run Dell UPS test
@@ -52,14 +52,23 @@ jobs:
           echo "Running script: $SCRIPT_PATH"
           xvfb-run -a python "$SCRIPT_PATH"
 
+      - name: Show generated output
+        if: always()
+        run: |
+          echo "After test run, files are:"
+          find . -maxdepth 6 -type f
+          echo "Output folder:"
+          ls -la dell_ups_test_output || true
+          echo "Screenshots folder:"
+          ls -la dell_ups_test_output/screenshots || true
+
       - name: Upload report and screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dellups-results
+          if-no-files-found: warn
           path: |
-            dell_ups_test_output/
-            *.csv
+            dell_ups_test_output/**
             **/*.csv
-            screenshots/
-            **/screenshots/
+            **/*.png
