@@ -8,13 +8,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get code from repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show files
+      - name: Show all files
         run: |
+          echo "Current folder:"
           pwd
-          ls -la
+          echo "All files:"
+          find . -maxdepth 5 -type f
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -27,15 +29,29 @@ jobs:
           pip install playwright
           python -m playwright install --with-deps chromium
 
-      - name: Run Python script
+      - name: Find and run dellups.py
         run: |
-          python dellups.py
+          echo "Searching for dellups.py..."
+          SCRIPT_PATH=$(find . -name "dellups.py" | head -n 1)
 
-      - name: Upload CSV and screenshots
+          echo "Script path found: $SCRIPT_PATH"
+
+          if [ -z "$SCRIPT_PATH" ]; then
+            echo "ERROR: dellups.py not found in repository"
+            echo "Available Python files:"
+            find . -name "*.py"
+            exit 1
+          fi
+
+          python "$SCRIPT_PATH"
+
+      - name: Upload report and screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dellups-results
           path: |
             *.csv
+            **/*.csv
             screenshots/
+            **/screenshots/
