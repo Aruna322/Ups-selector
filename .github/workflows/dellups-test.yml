@@ -15,8 +15,8 @@ jobs:
         run: |
           echo "Current folder:"
           pwd
-          echo "All files:"
-          find . -maxdepth 5 -type f
+          echo "All files in repo:"
+          find . -maxdepth 6 -type f
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -29,7 +29,7 @@ jobs:
           pip install playwright
           python -m playwright install --with-deps chromium
 
-           - name: Find and run dellups.py
+      - name: Find and run dellups.py
         run: |
           echo "Searching for dellups.py..."
           SCRIPT_PATH=$(find . -name "dellups.py" | head -n 1)
@@ -51,6 +51,7 @@ jobs:
         with:
           name: dellups-results
           path: |
+            dell_ups_test_output/
             *.csv
             **/*.csv
             screenshots/
