@@ -37,13 +37,13 @@ jobs:
           echo "Script path found: $SCRIPT_PATH"
 
           if [ -z "$SCRIPT_PATH" ]; then
-            echo "ERROR: dellups.py not found in repository"
-            echo "Available Python files:"
+            echo "ERROR: dellups.py not found"
+            echo "Python files available:"
             find . -name "*.py"
             exit 1
           fi
 
-          python "$SCRIPT_PATH"
+          xvfb-run -a python "$SCRIPT_PATH"
 
       - name: Upload report and screenshots
         if: always()
