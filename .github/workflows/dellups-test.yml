@@ -29,7 +29,7 @@ jobs:
           pip install playwright
           python -m playwright install --with-deps chromium
 
-      - name: Find and run dellups.py
+           - name: Find and run dellups.py
         run: |
           echo "Searching for dellups.py..."
           SCRIPT_PATH=$(find . -name "dellups.py" | head -n 1)
