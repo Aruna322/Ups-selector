@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import sync_playwright
 
 
 # ==========================================================
@@ -19,34 +19,85 @@ TIMEOUT = 30000
 OUTPUT_DIR = "dell_ups_test_output"
 SCREENSHOT_DIR = os.path.join(OUTPUT_DIR, "screenshots")
 
-TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
-CSV_FILE = os.path.join(OUTPUT_DIR, f"dell_ups_results_{TIMESTAMP}.csv")
+RUN_TIME = datetime.now().strftime("%Y%m%d_%H%M%S")
+CSV_FILE = os.path.join(OUTPUT_DIR, f"dell_ups_results_{RUN_TIME}.csv")
+
+
+# ==========================================================
+# FALLBACK COUNTRY LIST
+# ==========================================================
+
+FALLBACK_COUNTRIES = [
+    "Algeria",
+    "Argentina",
+    "Australia",
+    "Austria",
+    "Belgium",
+    "Brazil",
+    "Bulgaria",
+    "Canada",
+    "Chile",
+    "China",
+    "Colombia",
+    "Costa Rica",
+    "Croatia",
+    "Czech Republic",
+    "Denmark",
+    "Egypt",
+    "Estonia",
+    "Finland",
+    "France",
+    "Germany",
+    "Greece",
+    "Hungary",
+    "India",
+    "Indonesia",
+    "Ireland",
+    "Israel",
+    "Italy",
+    "Japan",
+    "Korea",
+    "Latvia",
+    "Malaysia",
+    "Mexico",
+    "Netherlands",
+    "New Zealand",
+    "Norway",
+    "Peru",
+    "Philippines",
+    "Poland",
+    "Portugal",
+    "Romania",
+    "Saudi Arabia",
+    "Singapore",
+    "Slovenia",
+    "South Africa",
+    "Spain",
+    "Sweden",
+    "Switzerland",
+    "Thailand",
+    "Turkey",
+    "Ukraine",
+    "United Arab Emirates",
+    "United Kingdom",
+    "United States",
+    "Vietnam",
+]
 
 
 # ==========================================================
 # HELPERS
 # ==========================================================
 
-def create_dirs():
+def create_output_folders():
     Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
     Path(SCREENSHOT_DIR).mkdir(parents=True, exist_ok=True)
 
 
-def safe_filename(value):
+def clean_filename(value):
     value = str(value).strip()
     value = re.sub(r"[^a-zA-Z0-9_-]+", "_", value)
     return value[:100] if value else "unknown"
-
-
-def save_screenshot(page, country_name):
-    filename = f"{safe_filename(country_name)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-    path = os.path.join(SCREENSHOT_DIR, filename)
-
-    try:
-        page.screenshot(path=path, full_page=True)
-        return path
-    except Exception:
-        return ""
 
 
 def wait_page_ready(page):
@@ -60,11 +111,22 @@ def wait_page_ready(page):
     except Exception:
         pass
 
-    page.wait_for_timeout(2000)
+    page.wait_for_timeout(3000)
+
+
+def save_screenshot(page, country_name):
+    file_name = f"{clean_filename(country_name)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+    file_path = os.path.join(SCREENSHOT_DIR, file_name)
+
+    try:
+        page.screenshot(path=file_path, full_page=True)
+        return file_path
+    except Exception:
+        return ""
 
 
 # ==========================================================
-# COOKIE HANDLING
+# COOKIE POPUP
 # ==========================================================
 
 def handle_cookie_popup(page):
@@ -83,9 +145,9 @@ def handle_cookie_popup(page):
 
     for selector in selectors:
         try:
-            locator = page.locator(selector)
-            if locator.count() > 0 and locator.first.is_visible(timeout=1000):
-                locator.first.click(timeout=3000)
+            button = page.locator(selector)
+            if button.count() > 0 and button.first.is_visible(timeout=1000):
+                button.first.click(timeout=3000)
                 page.wait_for_timeout(1000)
                 print("  ✓ Cookie popup handled")
                 return True
@@ -99,7 +161,7 @@ def handle_cookie_popup(page):
 # COUNTRY DROPDOWN
 # ==========================================================
 
-def find_country_select(page):
+def find_country_dropdown(page):
     selectors = [
         "select[name*='country' i]",
         "select[id*='country' i]",
@@ -116,10 +178,9 @@ def find_country_select(page):
                 dropdown = dropdowns.nth(i)
 
                 try:
-                    if dropdown.is_visible(timeout=1000):
-                        option_count = dropdown.locator("option").count()
-                        if option_count > 1:
-                            return dropdown
+                    option_count = dropdown.locator("option").count()
+                    if option_count > 1:
+                        return dropdown
                 except Exception:
                     continue
 
@@ -129,86 +190,134 @@ def find_country_select(page):
     return None
 
 
-def get_all_countries(page):
+def get_country_list(page):
     print("Reading country list...")
 
-    dropdown = find_country_select(page)
-
-    if dropdown is None:
-        raise Exception("Country dropdown not found")
-
-    options = dropdown.locator("option")
-    option_count = options.count()
-
+    dropdown = find_country_dropdown(page)
     countries = []
 
-    for i in range(option_count):
+    if dropdown is not None:
+        options = dropdown.locator("option")
+        option_count = options.count()
+
+        for i in range(option_count):
+            try:
+                option = options.nth(i)
+                text = option.inner_text(timeout=2000).strip()
+                value = option.get_attribute("value")
+
+                if not text:
+                    continue
+
+                text_lower = text.lower().strip()
+
+                skip_values = [
+                    "select",
+                    "choose",
+                    "country",
+                    "please select",
+                    "--",
+                ]
+
+                if text_lower in skip_values:
+                    continue
+
+                if "select" in text_lower and len(text_lower) < 30:
+                    continue
+
+                countries.append({
+                    "text": text,
+                    "value": value if value else text,
+                })
+
+            except Exception:
+                continue
+
+    if not countries:
+        print("Country dropdown not detected. Using fallback country list.")
+        countries = [{"text": country, "value": country} for country in FALLBACK_COUNTRIES]
+
+    unique_countries = []
+    seen = set()
+
+    for country in countries:
+        key = country["text"].lower().strip()
+        if key not in seen:
+            seen.add(key)
+            unique_countries.append(country)
+
+    print(f"Countries found: {len(unique_countries)}")
+    return unique_countries
+
+
+def select_country(page, country):
+    country_text = country["text"]
+    country_value = country.get("value", country_text)
+
+    dropdown = find_country_dropdown(page)
+
+    if dropdown is not None:
         try:
-            option = options.nth(i)
-            text = option.inner_text(timeout=2000).strip()
-            value = option.get_attribute("value")
+            dropdown.select_option(value=country_value, timeout=10000)
+            page.wait_for_timeout(2000)
+            return True, f"Selected country by value: {country_value}"
+        except Exception:
+            pass
 
-            if not text:
-                continue
+        try:
+            dropdown.select_option(label=country_text, timeout=10000)
+            page.wait_for_timeout(2000)
+            return True, f"Selected country by label: {country_text}"
+        except Exception:
+            pass
 
-            text_lower = text.lower()
+    # Custom dropdown fallback
+    custom_dropdown_selectors = [
+        "[role='combobox']",
+        "[class*='select']",
+        "[class*='dropdown']",
+        "button",
+        "input",
+    ]
 
-            if text_lower in ["select", "choose", "country", "please select", "--"]:
-                continue
+    for selector in custom_dropdown_selectors:
+        try:
+            items = page.locator(selector)
+            count = items.count()
 
-            if "select" in text_lower and len(text_lower) < 25:
-                continue
+            for i in range(min(count, 30)):
+                item = items.nth(i)
 
-            countries.append({
-                "name": text,
-                "value": value if value else text
-            })
+                try:
+                    if not item.is_visible(timeout=1000):
+                        continue
+
+                    item.click(timeout=3000)
+                    page.wait_for_timeout(1000)
+
+                    option = page.get_by_text(country_text, exact=True)
+
+                    if option.count() > 0:
+                        option.first.click(timeout=5000)
+                        page.wait_for_timeout(2000)
+                        return True, f"Selected country from custom dropdown: {country_text}"
+
+                except Exception:
+                    continue
 
         except Exception:
             continue
 
-    unique = []
-    seen = set()
-
-    for country in countries:
-        key = country["name"].lower().strip()
-        if key not in seen:
-            seen.add(key)
-            unique.append(country)
-
-    print(f"Countries found: {len(unique)}")
-    return unique
-
-
-def select_country(page, country):
-    dropdown = find_country_select(page)
-
-    if dropdown is None:
-        return False, "Country dropdown not found"
-
-    try:
-        if country.get("value"):
-            dropdown.select_option(value=country["value"], timeout=10000)
-            page.wait_for_timeout(2000)
-            return True, f"Selected by value: {country['value']}"
-    except Exception:
-        pass
-
-    try:
-        dropdown.select_option(label=country["name"], timeout=10000)
-        page.wait_for_timeout(2000)
-        return True, f"Selected by label: {country['name']}"
-    except Exception as e:
-        return False, f"Country selection failed: {str(e)}"
+    return False, f"Country selection failed: {country_text}"
 
 
 # ==========================================================
 # CONTINUE BUTTON
 # ==========================================================
 
-def click_continue_button(page):
+def click_continue(page):
     try:
-        page.mouse.wheel(0, 900)
+        page.mouse.wheel(0, 1000)
         page.wait_for_timeout(1000)
     except Exception:
         pass
@@ -248,7 +357,7 @@ def click_continue_button(page):
             items = page.locator(selector)
             count = items.count()
 
-            for i in range(min(count, 20)):
+            for i in range(min(count, 25)):
                 item = items.nth(i)
 
                 try:
@@ -286,11 +395,11 @@ def click_continue_button(page):
         except Exception:
             continue
 
-    return False, "Continue/Submit button not found"
+    return False, "Continue button not found"
 
 
 # ==========================================================
-# RESULT VALIDATION
+# VALIDATION
 # ==========================================================
 
 def check_results_page_opened(page, before_url):
@@ -315,7 +424,7 @@ def check_results_page_opened(page, before_url):
     ]
 
     if any(word in body_text for word in result_words):
-        return True, "Result-related text detected"
+        return True, "Result-related text detected on page"
 
     return False, "Result page not clearly opened"
 
@@ -402,7 +511,7 @@ def detect_products(page):
         "download",
     ]
 
-    found = []
+    found_items = []
     seen = set()
 
     for selector in product_selectors:
@@ -445,7 +554,7 @@ def detect_products(page):
 
                     if key not in seen:
                         seen.add(key)
-                        found.append(combined)
+                        found_items.append(combined)
 
                 except Exception:
                     continue
@@ -453,8 +562,8 @@ def detect_products(page):
         except Exception:
             continue
 
-    if found:
-        return True, len(found), f"Visible product indicators detected: {len(found)}"
+    if found_items:
+        return True, len(found_items), f"Visible product indicators detected: {len(found_items)}"
 
     return False, 0, "No visible product cards/items detected"
 
@@ -464,7 +573,7 @@ def detect_products(page):
 # ==========================================================
 
 def test_country(browser, country, index, total):
-    country_name = country["name"]
+    country_name = country["text"]
 
     print("\n==================================================")
     print(f"[{index}/{total}] Testing country: {country_name}")
@@ -472,7 +581,7 @@ def test_country(browser, country, index, total):
 
     context = browser.new_context(
         viewport={"width": 1440, "height": 1200},
-        ignore_https_errors=True
+        ignore_https_errors=True,
     )
 
     page = context.new_page()
@@ -502,7 +611,7 @@ def test_country(browser, country, index, total):
             screenshot = save_screenshot(page, country_name)
             final_url = page.url
 
-            print(f"  ✗ {reason}")
+            print(f"  FAILED: {reason}")
 
             return [
                 country_name,
@@ -517,7 +626,7 @@ def test_country(browser, country, index, total):
 
         print(f"  ✓ {selected_reason}")
 
-        clicked, click_reason = click_continue_button(page)
+        clicked, click_reason = click_continue(page)
 
         if clicked:
             continue_clicked = "YES"
@@ -568,7 +677,7 @@ def test_country(browser, country, index, total):
         except Exception:
             screenshot = ""
 
-        print(f"  ✗ Exception: {str(e)}")
+        print(f"  Exception: {str(e)}")
 
     finally:
         context.close()
@@ -590,7 +699,7 @@ def test_country(browser, country, index, total):
 # ==========================================================
 
 def main():
-    create_dirs()
+    create_output_folders()
 
     print("==================================================")
     print("Dell UPS Selector - All Countries Test")
@@ -604,13 +713,13 @@ def main():
             headless=HEADLESS,
             args=[
                 "--no-sandbox",
-                "--disable-dev-shm-usage"
-            ]
+                "--disable-dev-shm-usage",
+            ],
         )
 
         setup_context = browser.new_context(
             viewport={"width": 1440, "height": 1200},
-            ignore_https_errors=True
+            ignore_https_errors=True,
         )
 
         setup_page = setup_context.new_page()
@@ -622,20 +731,20 @@ def main():
             setup_page.goto(
                 BASE_URL,
                 wait_until="domcontentloaded",
-                timeout=60000
+                timeout=60000,
             )
 
             wait_page_ready(setup_page)
             handle_cookie_popup(setup_page)
 
-            countries = get_all_countries(setup_page)
+            countries = get_country_list(setup_page)
 
         finally:
             setup_context.close()
 
         if not countries:
             browser.close()
-            raise Exception("No countries found from dropdown")
+            raise Exception("No countries found")
 
         with open(CSV_FILE, "w", newline="", encoding="utf-8-sig") as csv_file:
             writer = csv.writer(csv_file)
