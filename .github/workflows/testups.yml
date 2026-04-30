@@ -1,0 +1,73 @@
+name: Test UPS Selector
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+    paths:
+      - "testups.py"
+      - ".github/workflows/testups.yml"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "testups.py"
+      - ".github/workflows/testups.yml"
+
+jobs:
+  test-ups:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check testups.py exists
+        run: |
+          echo "Repository files:"
+          ls -la
+
+          if [ ! -f "testups.py" ]; then
+            echo "ERROR: testups.py file not found in repository root"
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Make script headless for GitHub Actions
+        run: |
+          sed -i 's/HEADLESS = False/HEADLESS = True/g' testups.py
+          sed -i 's/SLOW_MO = 50/SLOW_MO = 0/g' testups.py
+          sed -i 's/SLOW_MO = 80/SLOW_MO = 0/g' testups.py
+
+      - name: Run testups.py
+        run: |
+          python testups.py
+
+      - name: Show output files
+        if: always()
+        run: |
+          echo "Generated output:"
+          ls -R dell_ups_test_output || true
+
+      - name: Upload report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testups-output
+          path: dell_ups_test_output/
+          if-no-files-found: warn
+          retention-days: 14
