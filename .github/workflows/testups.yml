@@ -20,19 +20,25 @@ on:
 jobs:
   test-ups:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check testups.py exists
+      - name: Show repository files
         run: |
-          echo "Repository files:"
+          echo "Current folder:"
+          pwd
+          echo "Files:"
           ls -la
 
+      - name: Check testups.py exists
+        run: |
           if [ ! -f "testups.py" ]; then
-            echo "ERROR: testups.py file not found in repository root"
+            echo "ERROR: testups.py not found in repository root"
+            echo "Available files:"
+            find . -maxdepth 3 -type f
             exit 1
           fi
 
@@ -47,13 +53,25 @@ jobs:
           pip install playwright
           python -m playwright install --with-deps chromium
 
-      - name: Make script headless for GitHub Actions
+      - name: Prepare output folder
         run: |
+          mkdir -p dell_ups_test_output/screenshots
+
+      - name: Make script CI compatible
+        run: |
+          echo "Updating script for GitHub Actions..."
+
           sed -i 's/HEADLESS = False/HEADLESS = True/g' testups.py
-          sed -i 's/SLOW_MO = 50/SLOW_MO = 0/g' testups.py
           sed -i 's/SLOW_MO = 80/SLOW_MO = 0/g' testups.py
+          sed -i 's/SLOW_MO = 50/SLOW_MO = 0/g' testups.py
+
+          echo "Checking HEADLESS value:"
+          grep -n "HEADLESS" testups.py || true
+          grep -n "SLOW_MO" testups.py || true
 
       - name: Run testups.py
+        env:
+          CI: true
         run: |
           python testups.py
 
@@ -61,7 +79,7 @@ jobs:
         if: always()
         run: |
           echo "Generated output:"
-          ls -R dell_ups_test_output || true
+          find dell_ups_test_output -type f || true
 
       - name: Upload report and screenshots
         if: always()
